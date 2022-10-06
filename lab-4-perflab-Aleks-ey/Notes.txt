@@ -1,0 +1,32 @@
+First change: 
+In MakeFile
+Line 9 originally looks like this CXXFLAGS= -g -O0 -fno-omit-frame-pointer -Wall
+We can change -O0 to -O2/-O3 for faster omptimization
+After testing both it seems -O3 had better results for me
+
+Second change:
+In FilterMain.cpp
+In applyFilter function
+on line 112 we can see:
+    "output -> color[plane][row][col] = 0;"
+the order for color is plane, row, then col
+yet our for loops are originally position so the order is col, row, then plane
+swapping plane with col helped increase optimization
+
+Third change:
+In FilterMain.cpp
+In applyFilter function
+on line 114 and 115 we originally see:
+    "j < filter -> getSize();" and "i < filter -> getSize();"
+instead of calling this function twice
+we can make a variable, int filterSize, and set it to filter -> getSize()
+then we can place the variable at the top of the function
+and replace filter -> getSize() with our variable for lines 114 and 115
+
+Fourth change:
+In FilterMain.cpp
+In applyFilter function
+on line 126 we originally have:
+    filter -> getDivisor()
+we can make a variable called filterDivisor and set it equal to filter -> getDivisor()
+then replace filter -> getDivisor() with the variable on line 126
